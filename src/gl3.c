@@ -1,12 +1,19 @@
-// OpenGL 3.3
+// OpenGL 3.3+
 
 #include "../include/simple2d.h"
 
+// Skip this file if OpenGL ES
 #if !GLES
 
-static GLuint shaderProgram;
-static GLuint texShaderProgram;
-static GLuint indices[] =
+static GLuint vbo;  // our primary vertex buffer object (VBO)
+static GLuint vboSize;  // size of the VBO in bytes
+static GLfloat *vboData;  // pointer to the VBO data
+static GLfloat *vboDataCurrent;  // pointer to the data for the current vertices
+static GLuint vboDataIndex = 0;  // index of the current object being rendered
+static GLuint vboObjSize = 1000;  // number of objects the VBO can store
+static GLuint shaderProgram;  // triangle shader program
+static GLuint texShaderProgram;  // texture shader program
+static GLuint indices[] =  // indices for rendering textured quads
   { 0, 1, 2,
     2, 3, 0 };
 
@@ -19,6 +26,7 @@ void S2D_GL3_ApplyProjection(GLfloat orthoMatrix[16]) {
   // Use the program object
   glUseProgram(shaderProgram);
 
+  // Apply the projection matrix to the triangle shader
   glUniformMatrix4fv(
     glGetUniformLocation(shaderProgram, "u_mvpMatrix"),
     1, GL_FALSE, orthoMatrix
@@ -27,6 +35,7 @@ void S2D_GL3_ApplyProjection(GLfloat orthoMatrix[16]) {
   // Use the texture program object
   glUseProgram(texShaderProgram);
 
+  // Apply the projection matrix to the texture shader
   glUniformMatrix4fv(
     glGetUniformLocation(texShaderProgram, "u_mvpMatrix"),
     1, GL_FALSE, orthoMatrix
@@ -78,17 +87,19 @@ int S2D_GL3_Init() {
     "  outColor = texture(tex, Texcoord) * Color;"
     "}";
 
-  // Create Vertex Array Object
+  // Create a vertex array object
   GLuint vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  // Create Vertex Buffer Object
-  GLuint vbo;
+  // Create a vertex buffer object and allocate data
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  vboSize = vboObjSize * sizeof(GLfloat) * 24;
+  vboData = (GLfloat *) malloc(vboSize);
+  vboDataCurrent = vboData;
 
-  // Create an element array
+  // Create an element buffer object
   GLuint ebo;
   glGenBuffers(1, &ebo);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
@@ -120,11 +131,12 @@ int S2D_GL3_Init() {
   // Check if linked
   S2D_GL_CheckLinked(shaderProgram, "GL3 shader");
 
-  // Specify the layout of the vertex data
+  // Specify the layout of the position vertex data...
   GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
   glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
   glEnableVertexAttribArray(posAttrib);
 
+  // ...and the color vertex data
   GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
   glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
   glEnableVertexAttribArray(colAttrib);
@@ -138,25 +150,30 @@ int S2D_GL3_Init() {
     return GL_FALSE;
   }
 
+  // Attach the shader objects to the program object
   glAttachShader(texShaderProgram, vertexShader);
   glAttachShader(texShaderProgram, texFragmentShader);
 
+  // Bind the varying out variables to the fragment shader color number
   glBindFragDataLocation(texShaderProgram, 0, "outColor");
 
+  // Link the shader program
   glLinkProgram(texShaderProgram);
 
   // Check if linked
   S2D_GL_CheckLinked(texShaderProgram, "GL3 texture shader");
 
-  // Specify the layout of the vertex data
+  // Specify the layout of the position vertex data...
   posAttrib = glGetAttribLocation(texShaderProgram, "position");
   glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
   glEnableVertexAttribArray(posAttrib);
 
+  // ...and the color vertex data...
   colAttrib = glGetAttribLocation(texShaderProgram, "color");
   glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
   glEnableVertexAttribArray(colAttrib);
 
+  // ...and the texture coordinates
   GLint texAttrib = glGetAttribLocation(texShaderProgram, "texcoord");
   glVertexAttribPointer(texAttrib, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
   glEnableVertexAttribArray(texAttrib);
@@ -166,7 +183,30 @@ int S2D_GL3_Init() {
   glDeleteShader(fragmentShader);
   glDeleteShader(texFragmentShader);
 
+  // If successful, return true
   return GL_TRUE;
+}
+
+
+/*
+ * Render the vertex buffer and reset it
+ */
+void S2D_GL3_FlushBuffers() {
+
+  // Use the triangle shader program
+  glUseProgram(shaderProgram);
+
+  // Bind to the vertex buffer object and update its data
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, vboSize, NULL, GL_DYNAMIC_DRAW);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLfloat) * vboDataIndex * 24, vboData);
+
+  // Render all the triangles in the buffer
+  glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(vboDataIndex * 3));
+
+  // Reset the buffer object index and data pointer
+  vboDataIndex = 0;
+  vboDataCurrent = vboData;
 }
 
 
@@ -180,14 +220,21 @@ void S2D_GL3_DrawTriangle(GLfloat x1, GLfloat y1,
                           GLfloat x3, GLfloat y3,
                           GLfloat r3, GLfloat g3, GLfloat b3, GLfloat a3) {
 
+  // If buffer is full, flush it
+  if (vboDataIndex >= vboObjSize) S2D_GL_FlushBuffers();
+
+  // Set the triangle data into a formatted array
   GLfloat vertices[] =
     { x1, y1, r1, g1, b1, a1, 0, 0,
       x2, y2, r2, g2, b2, a2, 0, 0,
       x3, y3, r3, g3, b3, a3, 0, 0 };
 
-  glUseProgram(shaderProgram);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
+  // Copy the vertex data into the current position of the buffer
+  memcpy(vboDataCurrent, vertices, sizeof(vertices));
+
+  // Increment the buffer object index and the vertex data pointer for next use
+  vboDataIndex++;
+  vboDataCurrent = (GLfloat *)((char *)vboDataCurrent + (sizeof(GLfloat) * 24));
 }
 
 
@@ -201,6 +248,11 @@ static void S2D_GL3_DrawTexture(int x, int y, int w, int h,
                                 GLfloat tx3, GLfloat ty3, GLfloat tx4, GLfloat ty4,
                                 GLuint texture_id) {
 
+  // Currently, textures are not buffered, so we have to flush all buffers so
+  // textures get rendered in the correct Z order
+  S2D_GL_FlushBuffers();
+
+  // Set up the vertex points
   S2D_GL_Point v1 = { .x = x,     .y = y     };
   S2D_GL_Point v2 = { .x = x + w, .y = y     };
   S2D_GL_Point v3 = { .x = x + w, .y = y + h };
@@ -214,6 +266,7 @@ static void S2D_GL3_DrawTexture(int x, int y, int w, int h,
     v4 = S2D_RotatePoint(v4, angle, rx, ry);
   }
 
+  // Set the textured quad data into a formatted array
   GLfloat vertices[] =
   //  vertex coords | colors      | x, y texture coords
     { v1.x, v1.y,     r, g, b, a,   tx1, ty1,    // Top-left
@@ -221,12 +274,17 @@ static void S2D_GL3_DrawTexture(int x, int y, int w, int h,
       v3.x, v3.y,     r, g, b, a,   tx3, ty3,    // Bottom-right
       v4.x, v4.y,     r, g, b, a,   tx4, ty4 };  // Bottom-left
 
+  // Use the texture shader program
   glUseProgram(texShaderProgram);
+
+  // Bind the texture using the provided ID
   glBindTexture(GL_TEXTURE_2D, texture_id);
 
+  // Create and Initialize the vertex data and array indices
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
+  // Render the textured quad
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 }
 

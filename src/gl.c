@@ -418,6 +418,22 @@ void S2D_GL_DrawText(S2D_Text *txt) {
 
 
 /*
+ * Render and flush OpenGL buffers
+ */
+void S2D_GL_FlushBuffers() {
+  #if GLES
+    return;  // TODO: not yet implemented
+  #else
+    if (S2D_GL2) {
+      return;  // TODO: not yet implemented
+    } else {
+      S2D_GL3_FlushBuffers();
+    }
+  #endif
+}
+
+
+/*
  * Clear buffers to given color values
  */
 void S2D_GL_Clear(S2D_Color clr) {

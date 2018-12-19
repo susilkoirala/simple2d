@@ -313,6 +313,11 @@ int S2D_Show(S2D_Window *window) {
     if (window->render) window->render();
 
     // Draw Frame //////////////////////////////////////////////////////////////
+
+    // Render and flush all OpenGL buffers
+    S2D_GL_FlushBuffers();
+
+    // Swap buffers to display drawn contents in the window
     SDL_GL_SwapWindow(window->sdl);
   }
 
