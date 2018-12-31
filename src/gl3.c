@@ -54,36 +54,47 @@ int S2D_GL3_Init() {
 
   // Vertex shader source string
   GLchar vertexSource[] =
-    "#version 150 core\n"
-    "uniform mat4 u_mvpMatrix;"
-    "in vec4 position;"
-    "in vec4 color;"
-    "in vec2 texcoord;"
-    "out vec4 Color;"
-    "out vec2 Texcoord;"
+    "#version 150 core\n"  // shader version
+
+    "uniform mat4 u_mvpMatrix;"  // projection matrix
+
+    // Input attributes to the vertex shader
+    "in vec4 position;"  // position value
+    "in vec4 color;"     // vertex color
+    "in vec2 texcoord;"  // texture coordinates
+
+    // Outputs to the fragment shader
+    "out vec4 Color;"     // vertex color
+    "out vec2 Texcoord;"  // texture coordinates
+
     "void main() {"
+    // Send the color and texture coordinates right through to the fragment shader
     "  Color = color;"
     "  Texcoord = texcoord;"
+    // Transform the vertex position using the projection matrix
     "  gl_Position = u_mvpMatrix * position;"
     "}";
 
   // Fragment shader source string
   GLchar fragmentSource[] =
-    "#version 150 core\n"
-    "in vec4 Color;"
-    "out vec4 outColor;"
+    "#version 150 core\n"  // shader version
+    "in vec4 Color;"       // input color from vertex shader
+    "out vec4 outColor;"   // output fragment color
+
     "void main() {"
-    "  outColor = Color;"
+    "  outColor = Color;"  // pass the color right through
     "}";
 
   // Fragment shader source string for textures
   GLchar texFragmentSource[] =
-    "#version 150 core\n"
-    "in vec4 Color;"
-    "in vec2 Texcoord;"
-    "out vec4 outColor;"
-    "uniform sampler2D tex;"
+    "#version 150 core\n"     // shader version
+    "in vec4 Color;"          // input color from vertex shader
+    "in vec2 Texcoord;"       // input texture coordinates
+    "out vec4 outColor;"      // output fragment color
+    "uniform sampler2D tex;"  // 2D texture unit
+
     "void main() {"
+    // Apply the texture unit, texture coordinates, and color
     "  outColor = texture(tex, Texcoord) * Color;"
     "}";
 
@@ -109,6 +120,8 @@ int S2D_GL3_Init() {
   GLuint fragmentShader    = S2D_GL_LoadShader(GL_FRAGMENT_SHADER,    fragmentSource, "GL3 Fragment");
   GLuint texFragmentShader = S2D_GL_LoadShader(GL_FRAGMENT_SHADER, texFragmentSource, "GL3 Texture Fragment");
 
+  // Triangle Shader //
+
   // Create the shader program object
   shaderProgram = glCreateProgram();
 
@@ -122,7 +135,7 @@ int S2D_GL3_Init() {
   glAttachShader(shaderProgram, vertexShader);
   glAttachShader(shaderProgram, fragmentShader);
 
-  // Bind the varying out variables to the fragment shader color number
+  // Bind the output color variable to the fragment shader color number
   glBindFragDataLocation(shaderProgram, 0, "outColor");
 
   // Link the shader program
@@ -133,13 +146,15 @@ int S2D_GL3_Init() {
 
   // Specify the layout of the position vertex data...
   GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
-  glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
   glEnableVertexAttribArray(posAttrib);
+  glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0);
 
   // ...and the color vertex data
   GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
-  glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
   glEnableVertexAttribArray(colAttrib);
+  glVertexAttribPointer(colAttrib, 4, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(2 * sizeof(GLfloat)));
+
+  // Texture Shader //
 
   // Create the texture shader program object
   texShaderProgram = glCreateProgram();
@@ -154,7 +169,7 @@ int S2D_GL3_Init() {
   glAttachShader(texShaderProgram, vertexShader);
   glAttachShader(texShaderProgram, texFragmentShader);
 
-  // Bind the varying out variables to the fragment shader color number
+  // Bind the output color variable to the fragment shader color number
   glBindFragDataLocation(texShaderProgram, 0, "outColor");
 
   // Link the shader program
@@ -221,7 +236,7 @@ void S2D_GL3_DrawTriangle(GLfloat x1, GLfloat y1,
                           GLfloat r3, GLfloat g3, GLfloat b3, GLfloat a3) {
 
   // If buffer is full, flush it
-  if (vboDataIndex >= vboObjSize) S2D_GL_FlushBuffers();
+  if (vboDataIndex >= vboObjSize) S2D_GL3_FlushBuffers();
 
   // Set the triangle data into a formatted array
   GLfloat vertices[] =
@@ -250,7 +265,7 @@ static void S2D_GL3_DrawTexture(int x, int y, int w, int h,
 
   // Currently, textures are not buffered, so we have to flush all buffers so
   // textures get rendered in the correct Z order
-  S2D_GL_FlushBuffers();
+  S2D_GL3_FlushBuffers();
 
   // Set up the vertex points
   S2D_GL_Point v1 = { .x = x,     .y = y     };
