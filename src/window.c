@@ -81,10 +81,10 @@ int S2D_Show(S2D_Window *window) {
       "Scaling window to %ix%i (requested size was %ix%i)",
       actual_width, actual_height, window->width, window->height
     );
+    window->orig_width  = window->width;
+    window->orig_height = window->height;
     window->width  = actual_width;
     window->height = actual_height;
-    window->orig_width  = actual_width;
-    window->orig_height = actual_height;
   }
 
   // Set Up OpenGL /////////////////////////////////////////////////////////////
